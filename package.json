@@ -1,0 +1,24 @@
+{
+  "name": "ikuuu-auto-checkin",
+  "version": "1.0.0",
+  "description": "> 利用 Github Actions 实现自动签到，支持多账户，支持 Telegram 通知。",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/827802685/ikuuu-auto-checkin.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/827802685/ikuuu-auto-checkin/issues"
+  },
+  "homepage": "https://github.com/827802685/ikuuu-auto-checkin#readme",
+  "dependencies": {
+    "jsdom": "^29.1.1"
+  }
+}

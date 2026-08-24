@@ -1,11 +1,9 @@
 import { appendFileSync } from "fs";
-
-const host = process.env.HOST || "ikuuu.foo";
-
-const checkInUrl = `https://${host}/user/checkin`;
+import { getAvailableDomains } from "./domains.js";
 
 // 签到
-async function checkIn(account) {
+async function checkIn(account, domain) {
+  const checkInUrl = `https://${domain}/user/checkin`;
   const response = await fetch(checkInUrl, {
     method: "POST",
     headers: {
@@ -18,17 +16,28 @@ async function checkIn(account) {
   }
 
   const data = await response.json();
-  console.log(`${account.name}: ${data.msg}`);
 
   return data.msg;
 }
 
-// 处理
+// 处理单个账户：依次尝试所有可用域名，直到签到成功
 async function processSingleAccount(account) {
+  const domains = await getAvailableDomains();
 
-  const checkInResult = await checkIn(account);
+  let lastError;
 
-  return checkInResult;
+  for (const domain of domains) {
+    try {
+      const msg = await checkIn(account, domain);
+      console.log(`${account.name}（${domain}）: ${msg}`);
+      return `${msg}（${domain}）`;
+    } catch (error) {
+      lastError = error;
+      console.warn(`${account.name} 在 ${domain} 签到失败: ${error.message}`);
+    }
+  }
+
+  throw lastError || new Error("所有域名签到失败");
 }
 
 function setGitHubOutput(name, value) {

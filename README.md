@@ -21,7 +21,7 @@
   ]
   ```
 
-- **HOST**: iKuuu 的域名，不设置时默认为 `ikuuu.win`，iKuuu 更改域名时必须同步修改。iKuuu 经常更换域名，需要随时注意修改。
+- **HOST**: （可选）备用域名。脚本会自动从 `https://ikuuu.de/auth/login` 获取当前可用域名进行签到，无需手动配置。仅当自动获取失败时才使用此值，不设置时回退到 `ikuuu.foo`、`ikuuu.bar`。
 - **TELEGRAM_TOKEN**: （可选）Telegram 通知的 Bot Token。
 - **TELEGRAM_TO**: （可选）Telegram 通知的 Chat ID。
 
