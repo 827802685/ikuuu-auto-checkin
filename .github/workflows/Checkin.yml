@@ -26,6 +26,11 @@ jobs:
         with:
           node-version: latest
 
+      - name: Install dependencies
+        run: |
+          npm install
+          npx playwright install chromium
+
       - name: Checkin
         id: checkin
         shell: bash
