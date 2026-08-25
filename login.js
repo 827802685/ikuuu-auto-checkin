@@ -113,13 +113,17 @@ export async function loginAndGetCookie(email, password, domain) {
         loggedIn = true;
         break;
       }
-      // 检查是否有错误提示
-      errorMsg = await page.evaluate(() => {
-        const el = document.querySelector(
-          ".alert-danger, .alert, .error, .login-error, .swal2-title, .swal2-html-container"
-        );
-        return el ? el.textContent.trim() : null;
-      });
+      // 检查是否有错误提示（页面跳转时 evaluate 会因上下文销毁抛错，忽略即可）
+      try {
+        errorMsg = await page.evaluate(() => {
+          const el = document.querySelector(
+            ".alert-danger, .alert, .error, .login-error, .swal2-title, .swal2-html-container"
+          );
+          return el ? el.textContent.trim() : null;
+        });
+      } catch {
+        // 页面正在导航，跳过本次检查
+      }
       if (errorMsg) break;
     }
 
