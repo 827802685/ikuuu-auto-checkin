@@ -28,6 +28,14 @@ async function launchBrowser() {
     ],
   };
 
+  // 支持通过环境变量指定 Chrome 路径（本地测试用），不影响 GitHub Actions
+  if (process.env.PLAYWRIGHT_CHROME_PATH) {
+    return await chromium.launch({
+      ...launchOptions,
+      executablePath: process.env.PLAYWRIGHT_CHROME_PATH,
+    });
+  }
+
   // 尝试系统 Chrome
   try {
     return await chromium.launch({ ...launchOptions, channel: "chrome" });

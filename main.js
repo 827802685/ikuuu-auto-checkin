@@ -16,21 +16,39 @@ async function checkIn(cookie, domain) {
     throw new Error(`网络请求出错 - ${response.status}`);
   }
 
-  const data = await response.json();
+  const text = await response.text();
 
-  return data.msg;
+  // 返回 HTML 说明 Cookie 无效，被重定向到登录页
+  if (text.trim().startsWith("<!DOCTYPE") || text.trim().startsWith("<html")) {
+    throw new Error("Cookie 无效或已过期，被重定向到登录页");
+  }
+
+  try {
+    const data = JSON.parse(text);
+    return data.msg;
+  } catch {
+    throw new Error(`签到接口返回异常: ${text.slice(0, 80)}`);
+  }
 }
 
-// 获取账户 Cookie：优先使用配置的 cookie，否则用账号密码自动登录
+// 获取账户 Cookie：优先用账号密码自动登录（Cookie 会过期），失败时回退到配置的 Cookie
 async function resolveCookie(account, domain) {
+  if (account.email && account.password) {
+    try {
+      console.log(`${account.name}: 使用账号密码自动登录获取 Cookie...`);
+      const cookie = await loginAndGetCookie(account.email, account.password, domain);
+      console.log(`${account.name}: ✅ 自动登录成功，已获取 Cookie`);
+      return cookie;
+    } catch (error) {
+      console.warn(`${account.name}: 自动登录失败，回退到配置的 Cookie: ${error.message}`);
+      if (account.cookie) {
+        return account.cookie;
+      }
+      throw error;
+    }
+  }
   if (account.cookie) {
     return account.cookie;
-  }
-  if (account.email && account.password) {
-    console.log(`${account.name}: 使用账号密码自动登录获取 Cookie...`);
-    const cookie = await loginAndGetCookie(account.email, account.password, domain);
-    console.log(`${account.name}: ✅ 自动登录成功，已获取 Cookie`);
-    return cookie;
   }
   throw new Error("账户缺少 cookie 或 email/password 配置");
 }
@@ -57,6 +75,8 @@ async function processSingleAccount(account) {
 }
 
 function setGitHubOutput(name, value) {
+  // 仅在 GitHub Actions 环境中写入（本地运行时 GITHUB_OUTPUT 未设置，跳过）
+  if (!process.env.GITHUB_OUTPUT) return;
   appendFileSync(process.env.GITHUB_OUTPUT, `${name}<<EOF\n${value}\nEOF\n`);
 }
 
