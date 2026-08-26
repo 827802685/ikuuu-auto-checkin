@@ -133,6 +133,9 @@ async function main() {
   if (hasError) {
     process.exit(1);
   }
+
+  // 显式退出进程：Playwright 的浏览器进程可能让事件循环保持活跃，导致进程不退出
+  process.exit(0);
 }
 
 main();
