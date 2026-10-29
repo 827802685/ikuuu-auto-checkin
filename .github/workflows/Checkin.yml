@@ -11,6 +11,7 @@ jobs:
   checkin:
     name: Checkin
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       # 优先从 Secrets 读取，未配置时回退到 Variables
       ACCOUNTS: ${{ secrets.ACCOUNTS || vars.ACCOUNTS }}
@@ -21,15 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Use Node.js latest
+      - name: Use Node.js 22
         uses: actions/setup-node@v6
         with:
-          node-version: latest
+          node-version: "22"
 
       - name: Install dependencies
-        run: |
-          npm install
-          npx playwright install chromium
+        run: npm install --no-audit --no-fund
 
       - name: Checkin
         id: checkin

@@ -1,16 +1,27 @@
 import { appendFileSync } from "fs";
 import { getAvailableDomains } from "./domains.js";
-import { loginAndGetCookie } from "./login.js";
+
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 // 签到
 async function checkIn(cookie, domain) {
-  const checkInUrl = `https://${domain}/user/checkin`;
-  const response = await fetch(checkInUrl, {
+  const response = await fetch(`https://${domain}/user/checkin`, {
     method: "POST",
+    redirect: "manual",
     headers: {
       Cookie: cookie,
+      "User-Agent": USER_AGENT,
+      "X-Requested-With": "XMLHttpRequest",
+      Referer: `https://${domain}/user`,
     },
+    signal: AbortSignal.timeout(20000),
   });
+
+  // 未登录/会话失效时面板会 302 到登录页
+  if (response.status >= 300 && response.status < 400) {
+    throw new Error("Cookie 无效或已过期（被重定向到登录页）");
+  }
 
   if (!response.ok) {
     throw new Error(`网络请求出错 - ${response.status}`);
@@ -20,48 +31,45 @@ async function checkIn(cookie, domain) {
 
   // 返回 HTML 说明 Cookie 无效，被重定向到登录页
   if (text.trim().startsWith("<!DOCTYPE") || text.trim().startsWith("<html")) {
-    throw new Error("Cookie 无效或已过期，被重定向到登录页");
+    throw new Error("Cookie 无效或已过期，返回了登录页 HTML");
   }
 
+  let data;
   try {
-    const data = JSON.parse(text);
-    return data.msg;
+    data = JSON.parse(text);
   } catch {
     throw new Error(`签到接口返回异常: ${text.slice(0, 80)}`);
   }
+
+  // SSPanel 约定：ret > 0 表示成功
+  if (data.ret === 0 || data.ret === false) {
+    throw new Error(data.msg || "签到失败");
+  }
+  return data.msg || JSON.stringify(data);
 }
 
-// 获取账户 Cookie：优先用账号密码自动登录（Cookie 会过期），失败时回退到配置的 Cookie
-async function resolveCookie(account, domain) {
-  if (account.email && account.password) {
-    try {
-      console.log(`${account.name}: 使用账号密码自动登录获取 Cookie...`);
-      const cookie = await loginAndGetCookie(account.email, account.password, domain);
-      console.log(`${account.name}: ✅ 自动登录成功，已获取 Cookie`);
-      return cookie;
-    } catch (error) {
-      console.warn(`${account.name}: 自动登录失败，回退到配置的 Cookie: ${error.message}`);
-      if (account.cookie) {
-        return account.cookie;
-      }
-      throw error;
-    }
+// 取账户 Cookie
+// 说明：iKuuu 登录已改为 GeeTest v4「点选图片」验证码 + AJAX 分阶段登录，
+// 无法在 CI 里自动通过，因此不再支持账号密码自动登录，只支持 Cookie。
+function resolveCookie(account) {
+  if (account.cookie) return account.cookie;
+
+  if (account.email || account.password) {
+    throw new Error(
+      "账号密码登录已不可用（iKuuu 改为图片点选验证码，脚本无法自动通过）。请在 ACCOUNTS 中为该账户配置 cookie"
+    );
   }
-  if (account.cookie) {
-    return account.cookie;
-  }
-  throw new Error("账户缺少 cookie 或 email/password 配置");
+  throw new Error("账户缺少 cookie 配置");
 }
 
-// 处理单个账户：依次尝试所有可用域名，直到签到成功
+// 单个账户：依次尝试所有可用域名，直到签到成功
 async function processSingleAccount(account) {
   const domains = await getAvailableDomains();
+  const cookie = resolveCookie(account);
 
   let lastError;
-
   for (const domain of domains) {
     try {
-      const cookie = await resolveCookie(account, domain);
       const msg = await checkIn(cookie, domain);
       console.log(`${account.name}（${domain}）: ${msg}`);
       return `${msg}（${domain}）`;
@@ -82,59 +90,45 @@ function setGitHubOutput(name, value) {
 
 // 入口
 async function main() {
-
   let accounts;
 
   try {
     if (!process.env.ACCOUNTS) {
       throw new Error("❌ 未配置账户信息。");
     }
-
     accounts = JSON.parse(process.env.ACCOUNTS);
   } catch (error) {
-    const message = `❌ ${error.message.includes("JSON") ? "账户信息配置格式错误。" : error.message
-      }`;
+    const message = `❌ ${
+      error.message.includes("JSON") ? "账户信息配置格式错误。" : error.message
+    }`;
     console.error(message);
     setGitHubOutput("result", message);
     process.exit(1);
   }
 
-  const allPromises = accounts.map((account) => processSingleAccount(account));
-  const results = await Promise.allSettled(allPromises);
+  const results = await Promise.allSettled(
+    accounts.map((account) => processSingleAccount(account))
+  );
 
-  const msgHeader = "\n======== 签到结果 ========\n\n";
-  console.log(msgHeader);
+  console.log("\n======== 签到结果 ========\n");
 
   let hasError = false;
-
   const resultLines = results.map((result, index) => {
     const accountName = accounts[index].name;
-
     const isSuccess = result.status === "fulfilled";
-
-    if (!isSuccess) {
-      hasError = true;
-    }
+    if (!isSuccess) hasError = true;
 
     const icon = isSuccess ? "✅" : "❌";
     const message = isSuccess ? result.value : result.reason.message;
-
     const line = `${accountName}: ${icon} ${message}`;
 
     isSuccess ? console.log(line) : console.error(line);
-
     return line;
   });
 
-  const resultMsg = resultLines.join("\n");
+  setGitHubOutput("result", resultLines.join("\n"));
 
-  setGitHubOutput("result", resultMsg);
-
-  if (hasError) {
-    process.exit(1);
-  }
-
-  // 显式退出进程：Playwright 的浏览器进程可能让事件循环保持活跃，导致进程不退出
+  if (hasError) process.exit(1);
   process.exit(0);
 }
 
